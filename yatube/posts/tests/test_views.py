@@ -180,8 +180,6 @@ class PostViewTests(TestCase):
             'text': forms.fields.CharField,
             'group': forms.fields.ChoiceField,
             'image': forms.fields.ImageField,
-            'header': forms.fields.CharField,
-
         }
         for view_reverse in (self.EDIT_REVERSE, self.CREATE_REVERSE):
             for value, expected_instance in form_fields.items():
