@@ -1,3 +1,5 @@
+from datetime import datetime as dt
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -48,9 +50,13 @@ def profile(request, username):
     author = get_object_or_404(User, username=username)
     posts = author.posts.all()
     page_obj = paginator_func(posts, request)
+    following = request.user.is_authenticated and author.following.filter(
+        user=request.user
+    ).exists()
     context = {
         'page_obj': page_obj,
         'author': author,
+        'following': following
     }
     return render(request, 'posts/profile.html', context)
 
@@ -99,7 +105,7 @@ def post_edit(request, post_id):
     if request.user != post.author:
         return redirect('posts:post_detail', post_id)
     if form.is_valid():
-        post.was_edited = True
+        post.edited = dt.now()
         form.save()
         return redirect('posts:post_detail', post_id)
     context = {

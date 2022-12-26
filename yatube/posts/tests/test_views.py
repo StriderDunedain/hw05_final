@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..models import Group, Post
+from ..models import Follow, Group, Post
 
 User = get_user_model()
 POSTS_PER_PAGE = settings.POSTS_PER_PAGE
@@ -24,6 +24,12 @@ class PostViewTests(TestCase):
         super().setUpClass()
 
         cls.author = User.objects.create(username='author228')
+        cls.user_following = User.objects.create(
+            username='user_following',
+        )
+        cls.user_follower = User.objects.create(
+            username='user_follower',
+        )
 
         cls.group = Group.objects.create(
             title='тестовое название',
@@ -146,13 +152,26 @@ class PostViewTests(TestCase):
         self.assertEqual(post_id, self.post.pk)
 
     def test_cache(self):
-        post_count_before = Post.objects.count()
-        self.authorized_client.post(
-            self.CREATE_REVERSE,
-            data=self.create_form,
-            follow=True
+        """Проверяем работу кэша"""
+        Post.objects.create(
+            text=self.post.text,
+            author=self.post.author,
+            group=self.group
         )
-        self.assertNotEqual(Post.objects.count(), post_count_before)
+        # Checking how many posts there are
+        index_response_1 = self.authorized_client.get(self.INDEX_REVERSE)
+        # Getting, checking and deleting new post
+        profile_response = self.authorized_client.get(self.PROFILE_REVERSE)
+        self._test_context_method(profile_response)
+        new_post = profile_response.context['page_obj'][0]
+        new_post.delete()
+        # Checking how many posts there are after deletion - should be the same
+        index_response_2 = self.authorized_client.get(self.INDEX_REVERSE)
+        self.assertEqual(index_response_1.content, index_response_2.content)
+        # Checking again, but clearing cache first, - should not be the same
+        cache.clear()
+        index_response_3 = self.authorized_client.get(self.INDEX_REVERSE)
+        self.assertNotEqual(index_response_1.content, index_response_3.content)
 
     def test_images_anywhere(self):
         """Тест картинок"""
@@ -233,18 +252,82 @@ class PaginatorViewTests(TestCase):
             'На первой странице не 10 постов!'
         )
 
-    def test_3_posts_on_second_page(self):
-        """Тестируем, что на второй странице 3 поста"""
+    def test_remaining_posts_on_last_page(self):
+        """Тестируем, что на второй странице определенное количество постов"""
         response = self.authorized_client.get(
             self.INDEX_REVERSE + '?page=2'
         )
-        second_page = len(self.posts_bulk) % POSTS_PER_PAGE
-        if second_page == 0:
+        last_page = len(self.posts_bulk) % POSTS_PER_PAGE
+        if last_page == 0:
             raise ValueError('''TOTAL_POSTS нацело делится на POSTS_PER_PAGE!
                                 Проверьте эти две переменные!''')
         self.assertEqual(
             len(response.context['page_obj']),
-            second_page,
-            f'''Количество постов на последней странице не {second_page}!
+            last_page,
+            f'''Количество постов на последней странице не {last_page}!
                 Возможно, ошибка в TOTAL_POSTS'''
         )
+
+
+class FollowTests(TestCase):
+    class FollowViewsTest(TestCase):
+        @classmethod
+        def setUpClass(cls):
+            super().setUpClass()
+            cls.user_following = User.objects.create(
+                username='user_following',
+            )
+            cls.user_follower = User.objects.create(
+                username='user_follower',
+            )
+            cls.post = Post.objects.create(
+                text='Подпишись на меня',
+                author=cls.user_following,
+            )
+            cls.PROFILE_FOLLOW_REVERSE = reverse(
+                'posts:profile_follow',
+                kwargs={'username': cls.user_follower}
+            )
+            cls.PROFILE_UNFOLLOW_REVERSE = reverse(
+                'posts:profile_unfollow',
+                kwargs={'username': cls.user_follower.username},
+            )
+            cls.FOLLOW = '/follow/'
+
+        def setUp(self):
+            cache.clear()
+            self.authorized_client_follower = Client()
+            self.authorized_client_follower.force_login(self.user_follower)
+            self.authorized_client_following = Client()
+            self.authorized_client_following.force_login(self.user_following)
+
+        def test_post_profile_follow(self):
+            """Проверка подписки на пользователя"""
+            count_follow = Follow.objects.count()
+            self.authorized_client_follower.post(self.PROFILE_FOLLOW_REVERSE)
+            follow = Follow.objects.all().latest('id')
+            self.assertEqual(Follow.objects.count(), count_follow + 1)
+            self.assertEqual(follow.author_id, self.user_follower.id)
+            self.assertEqual(follow.user_id, self.user_following.id)
+
+        def test_post_profile_unfollow(self):
+            """Проверка отписки от пользователя"""
+            Follow.objects.create(
+                author=self.user_follower,
+                user=self.user_following
+            )
+            count_follow = Follow.objects.count()
+            self.authorized_client_follower.get(self.PROFILE_UNFOLLOW_REVERSE)
+            self.assertEqual(Follow.objects.all().count(), count_follow - 1)
+
+        def test_post_follow_index_follower(self):
+            """Запись появляется в ленте подписчиков"""
+            Follow.objects.create(
+                user=self.user_follower,
+                author=self.user_following
+            )
+            response = self.authorized_client_follower.get(self.FOLLOW)
+            post_text_0 = response.context['page_obj'][0].text
+            self.assertEqual(post_text_0, 'Тестовая запись для подписчиков')
+            response = self.authorized_client_following.get()
+            self.assertNotEqual(response, 'Тестовая запись для подписчиков')

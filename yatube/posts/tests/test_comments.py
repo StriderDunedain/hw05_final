@@ -34,6 +34,10 @@ class PostCommentsTests(TestCase):
             'posts:add_comment',
             kwargs={'post_id': cls.post.pk}
         )
+        cls.DETAIL_REVERSE = reverse(
+            'posts:post_detail',
+            kwargs={'post_id': cls.post.pk}
+        )
         cls.comment_form = {
             'text': cls.post.text
         }
@@ -45,18 +49,28 @@ class PostCommentsTests(TestCase):
         self.authorized_client.force_login(self.user)
 
     def test_comments_for_authorized(self):
-        """Только авторизованный пользователь может оставить коммент"""
-        guest_response = self.guest_client.post(
-            self.ADD_COMMENT_REVERSE,
-            data=self.comment_form,
-            follow=True
-        )
+        """Авторизованный пользователь может оставить коммент"""
         auth_response = self.authorized_client.post(
             self.ADD_COMMENT_REVERSE,
             data=self.comment_form,
             follow=True
         )
+        post_detail = self.authorized_client.get(self.DETAIL_REVERSE)
+        comment = post_detail.context['comments'][0]
         self.assertEqual(auth_response.status_code, HTTPStatus.OK)
+        self.assertEqual(comment.text, self.post.text)
+        self.assertEqual(
+            comment.author.get_username(),
+            self.user.get_username()
+        )
+
+    def test_comments_for_guest(self):
+        """Гость не может оставить коммент"""
+        guest_response = self.guest_client.post(
+            self.ADD_COMMENT_REVERSE,
+            data=self.comment_form,
+            follow=True
+        )
         self.assertRedirects(
             guest_response,
             self.LOGIN + '?next=' + self.ADD_COMMENT_REVERSE

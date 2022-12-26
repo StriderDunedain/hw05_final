@@ -26,7 +26,7 @@ class Post(models.Model):
         blank=True,
         max_length=50
     )
-    was_edited = models.BooleanField(default=False)
+    edited = models.DateTimeField(blank=True, null=True)
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -73,6 +73,7 @@ class Comment(models.Model):
     text = models.TextField(
         help_text='Комментарий ждет...'
     )
+    edited = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ('-created',)

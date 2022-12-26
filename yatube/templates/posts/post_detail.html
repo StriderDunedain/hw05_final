@@ -9,7 +9,10 @@
       <ul class="list-group list-group-flush">
         <li class="list-group-item">
           Дата публикации: {{ post.pub_date|date:'d E Y' }}
-          {% if post.was_edited %}(Ред.){% endif %}
+          {% if post.edited %}
+            (Ред. {{ post.edited|date:"d E Y" }} в {{ post.edited|date:"H:i" }})
+            <br>
+          {% endif %}
         </li>
           {% if post.group %}
             <li class="list-group-item">
