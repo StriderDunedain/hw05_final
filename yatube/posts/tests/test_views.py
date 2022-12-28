@@ -327,7 +327,7 @@ class FollowTests(TestCase):
                 author=self.user_following
             )
             response = self.authorized_client_follower.get(self.FOLLOW)
-            post_text_0 = response.context['page_obj'][0].text
-            self.assertEqual(post_text_0, 'Тестовая запись для подписчиков')
+            post_text = response.context['page_obj'][0].text
+            self.assertEqual(post_text, 'Тестовая запись для подписчиков')
             response = self.authorized_client_following.get()
             self.assertNotEqual(response, 'Тестовая запись для подписчиков')

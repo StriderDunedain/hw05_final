@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from ..models import Group, Post
+from ..models import Comment, Group, Post
 
 User = get_user_model()
 
@@ -55,8 +55,7 @@ class PostCommentsTests(TestCase):
             data=self.comment_form,
             follow=True
         )
-        post_detail = self.authorized_client.get(self.DETAIL_REVERSE)
-        comment = post_detail.context['comments'][0]
+        comment = Comment.objects.filter(post=self.post)[0]
         self.assertEqual(auth_response.status_code, HTTPStatus.OK)
         self.assertEqual(comment.text, self.post.text)
         self.assertEqual(
@@ -66,11 +65,14 @@ class PostCommentsTests(TestCase):
 
     def test_comments_for_guest(self):
         """Гость не может оставить коммент"""
+        comments_before = Comment.objects.count()
         guest_response = self.guest_client.post(
             self.ADD_COMMENT_REVERSE,
             data=self.comment_form,
             follow=True
         )
+        comments_after = Comment.objects.count()
+        self.assertEqual(comments_before, comments_after)
         self.assertRedirects(
             guest_response,
             self.LOGIN + '?next=' + self.ADD_COMMENT_REVERSE
